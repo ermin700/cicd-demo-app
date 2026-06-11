@@ -14,11 +14,12 @@ spec:
       labels:
         app: flask-app
     spec:
+      imagePullSecrets:
+        - name: dockerhub-pull-secret
       containers:
         - name: flask-app
-          # Replace with your actual image, e.g. ghcr.io/<user>/my-flask-app:latest
-          image: my-flask-app:latest
-          imagePullPolicy: IfNotPresent
+          image: ermin700/flask-app:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 5000
           resources:
