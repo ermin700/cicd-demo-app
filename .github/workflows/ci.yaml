@@ -20,16 +20,16 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
+        working-directory: app
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install flake8
 
       - name: Lint with flake8
+        working-directory: app
         run: |
-          # Fail on syntax errors and undefined names
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # Treat everything else as warnings (won't fail the build)
           flake8 . --count --exit-zero --max-line-length=100 --statistics
 
   docker-build:
@@ -41,15 +41,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: docker build -t my-flask-app .
+        run: docker build -t my-flask-app ./app
 
       - name: Smoke test the container
         run: |
-          # Start the container in the background
           docker run -d -p 5000:5000 --name flask-test my-flask-app
-          # Give it a moment to boot
           sleep 5
-          # Verify the home page responds
           curl --fail --silent http://localhost:5000/ || (docker logs flask-test && exit 1)
-          # Clean up
           docker stop flask-test
