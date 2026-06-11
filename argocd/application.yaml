@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://github.com/ermin700/cicd-demo-app.git
     targetRevision: main
-    path: deployment
+    path: deployment/
 
   destination:
     server: https://kubernetes.default.svc
