@@ -1,71 +1,70 @@
 # Flask App with Docker
 
-A simple Flask web application containerized with Docker, with CI and
-Kubernetes deployment manifests.
+A Flask web application containerized with Docker, with a GitHub Actions CI pipeline and GitOps deployment to Kubernetes via ArgoCD.
 
 ## Project Structure
 
 ```
-myapp/
-├── app.py                  # Main Flask application
-├── requirements.txt        # Python dependencies
-├── Dockerfile              # Container build instructions
-├── .dockerignore           # Files to exclude from the image
-├── deployment.yaml         # Kubernetes Deployment + Service
-├── templates/
-│   └── index.html          # Home page template
+cicd-demo-app/
+├── app/
+│   ├── app.py              # Flask application
+│   ├── requirements.txt    # Python dependencies (Flask, Gunicorn)
+│   ├── Dockerfile          # Container build instructions
+│   └── templates/
+│       └── index.html      # Interactive home page
+├── deployment/
+│   ├── deployment.yaml     # Kubernetes Deployment (3 replicas)
+│   └── service.yaml        # Kubernetes ClusterIP Service
+├── argocd/
+│   └── application.yaml    # ArgoCD Application manifest
 └── .github/
     └── workflows/
         └── ci.yaml         # GitHub Actions CI pipeline
 ```
 
-## Application
+## API Endpoints
 
-`app.py` defines a Flask app with three routes:
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Interactive home page |
+| `GET` | `/about` | Plain-text about page |
+| `GET` | `/health` | Health check — returns status and UTC timestamp |
+| `GET` | `/api/timestamp` | Current time in ISO and Unix formats |
+| `POST` | `/api/greet` | Returns a personalised greeting |
+| `POST` | `/api/echo` | Echoes back any JSON payload |
 
-- `GET /` — renders the home page (`index.html`)
-- `GET /about` — returns a plain-text about page
-- `POST /api/greet` — accepts JSON `{"name": "..."}` and returns a greeting
+## Running Locally
 
-The app listens on `0.0.0.0:5000` so it's reachable from outside the container.
-
-## Requirements
-
-Dependencies are listed in `requirements.txt`:
-
-```
-flask
-```
-
-## Running Locally (without Docker)
+**Without Docker:**
 
 ```bash
+cd app
 pip install -r requirements.txt
 python app.py
 ```
 
-Then visit `http://127.0.0.1:5000`.
-
-## Running with Docker
-
-Build the image:
+**With Docker:**
 
 ```bash
-docker build -t my-flask-app .
+docker build -t flask-app ./app
+docker run -p 5000:5000 flask-app
 ```
 
-Run the container:
-
-```bash
-docker run -p 5000:5000 my-flask-app
-```
-
-Then visit `http://localhost:5000`. The `-p 5000:5000` flag maps the
-container's port 5000 to your machine's port 5000.
+Visit `http://localhost:5000` — the home page has interactive cards for every endpoint.
 
 ## API Usage
 
-Example request to the greet endpoint:
+**Health check:**
+
+```bash
+curl http://localhost:5000/health
+```
+
+```json
+{"status": "ok", "timestamp": "2025-01-01T12:00:00+00:00"}
+```
+
+**Greet:**
 
 ```bash
 curl -X POST http://localhost:5000/api/greet \
@@ -73,81 +72,71 @@ curl -X POST http://localhost:5000/api/greet \
   -d '{"name": "Alice"}'
 ```
 
-Response:
-
 ```json
 {"message": "Hello, Alice!"}
 ```
 
-## Continuous Integration
-
-The GitHub Actions workflow at `.github/workflows/ci.yaml` runs on every
-push and pull request to `main`. It has two jobs:
-
-1. **Lint** — installs dependencies and runs `flake8`, failing only on real
-   errors (syntax errors, undefined names) and reporting style issues as
-   non-blocking warnings.
-2. **Docker Build** — builds the image, starts the container, and curls the
-   home page as a smoke test. Runs only if linting passes.
-
-## Kubernetes Deployment
-
-The `deployment.yaml` manifest defines two resources:
-
-- A **Deployment** running 2 replicas of the app, with CPU/memory
-  requests and limits, plus liveness and readiness probes on `/` (port 5000).
-- A **Service** (type `ClusterIP`) that exposes the pods internally on
-  port 80, forwarding to the container's port 5000.
-
-Apply it with:
+**Echo:**
 
 ```bash
-kubectl apply -f deployment.yaml
+curl -X POST http://localhost:5000/api/echo \
+  -H "Content-Type: application/json" \
+  -d '{"foo": "bar"}'
 ```
 
-Check the rollout:
+```json
+{"echo": {"foo": "bar"}}
+```
+
+**Timestamp:**
 
 ```bash
+curl http://localhost:5000/api/timestamp
+```
+
+```json
+{"utc": "2025-01-01T12:00:00+00:00", "unix": 1735732800}
+```
+
+## Continuous Integration
+
+The GitHub Actions workflow (`.github/workflows/ci.yaml`) runs on every push and PR to `main` with two sequential jobs:
+
+1. **Lint** — runs `flake8` against `app/`, failing on syntax errors and undefined names.
+2. **Docker Build** — builds the image, smoke-tests it with `curl`, then pushes to Docker Hub (`ermin700/flask-app:latest`) **only on direct pushes to `main`**.
+
+Required repository secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`.
+
+## Kubernetes & GitOps
+
+### ArgoCD
+
+The `argocd/application.yaml` manifest configures ArgoCD to watch the `deployment/` directory on the `main` branch and automatically sync changes to the `flask-app` namespace (with prune and self-heal enabled).
+
+Apply the ArgoCD application once:
+
+```bash
+kubectl apply -f argocd/application.yaml
+```
+
+After that, any change to `deployment/` merged to `main` is automatically rolled out.
+
+### Manual kubectl deploy
+
+```bash
+kubectl apply -f deployment/
 kubectl get pods -l app=flask-app
 kubectl get service flask-app
 ```
 
-### Before deploying
-
-- **Image:** the manifest uses `my-flask-app:latest` with
-  `imagePullPolicy: IfNotPresent`, which suits a local cluster (minikube,
-  kind) where the image is loaded directly. For a real cluster, push the
-  image to a registry and update the `image:` field, e.g.
-  `ghcr.io/<your-user>/my-flask-app:1.0.0`. Prefer a pinned version tag
-  over `latest` for predictable rollouts.
-
 ### Accessing the app
 
-`ClusterIP` only exposes the app inside the cluster. To reach it:
+The Service is `ClusterIP` (internal only). To reach it locally:
 
-- **Quick local test:**
+```bash
+kubectl port-forward service/flask-app 8080:80
+```
 
-  ```bash
-  kubectl port-forward service/flask-app 8080:80
-  ```
+Then visit `http://localhost:8080`.
 
-  Then visit `http://localhost:8080`.
-
-- **Cloud provider:** change the Service `type` to `LoadBalancer`.
-- **Production HTTP:** add an `Ingress` resource in front of the Service.
-
-## Production Notes
-
-The default setup uses Flask's built-in development server, which is not
-suitable for production. For a production deployment, use a WSGI server
-like Gunicorn:
-
-1. Add `gunicorn` to `requirements.txt`
-2. Change the Dockerfile `CMD` to:
-
-   ```dockerfile
-   CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
-   ```
-
-Also set `debug=False` (or remove the `debug` flag) in `app.py` when
-deploying.
+For external access, change the Service `type` to `LoadBalancer` or add an `Ingress` resource.

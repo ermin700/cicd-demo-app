@@ -2,9 +2,201 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Flask App</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #1a1a1a;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 3rem 1rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    header h1 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #2d6a4f;
+    }
+
+    header p {
+      margin-top: 0.5rem;
+      color: #555;
+      font-size: 1.1rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.25rem;
+      width: 100%;
+      max-width: 900px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 1.5rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #2d6a4f;
+      margin-bottom: 0.75rem;
+    }
+
+    .card p { color: #555; font-size: 0.9rem; margin-bottom: 1rem; }
+
+    .badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      margin-right: 0.3rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .get  { background: #d1fae5; color: #065f46; }
+    .post { background: #dbeafe; color: #1e40af; }
+
+    input, button {
+      font-size: 0.9rem;
+      border-radius: 6px;
+      border: 1px solid #ddd;
+      padding: 0.4rem 0.7rem;
+    }
+
+    input { width: 100%; margin-bottom: 0.5rem; outline: none; }
+    input:focus { border-color: #2d6a4f; }
+
+    button {
+      background: #2d6a4f;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      padding: 0.45rem 1rem;
+    }
+
+    button:hover { background: #1b4332; }
+
+    .result {
+      margin-top: 0.75rem;
+      padding: 0.6rem 0.8rem;
+      background: #f0fdf4;
+      border-left: 3px solid #2d6a4f;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      font-family: monospace;
+      word-break: break-all;
+      display: none;
+    }
+
+    footer {
+      margin-top: 3rem;
+      color: #aaa;
+      font-size: 0.8rem;
+    }
+  </style>
 </head>
 <body>
-  <h1>Hello from Flask!</h1>
+  <header>
+    <h1>Flask App</h1>
+    <p>A simple REST API demo</p>
+  </header>
+
+  <div class="grid">
+
+    <!-- Health -->
+    <div class="card">
+      <h2>Health Check</h2>
+      <p>Returns server status and current UTC time.</p>
+      <span class="badge get">GET</span><code>/health</code><br><br>
+      <button onclick="callHealth()">Check</button>
+      <div class="result" id="health-result"></div>
+    </div>
+
+    <!-- Greet -->
+    <div class="card">
+      <h2>Greet</h2>
+      <p>Returns a personalised greeting.</p>
+      <span class="badge post">POST</span><code>/api/greet</code><br><br>
+      <input id="greet-name" type="text" placeholder="Your name">
+      <button onclick="callGreet()">Send</button>
+      <div class="result" id="greet-result"></div>
+    </div>
+
+    <!-- Echo -->
+    <div class="card">
+      <h2>Echo</h2>
+      <p>Echoes back whatever JSON you send.</p>
+      <span class="badge post">POST</span><code>/api/echo</code><br><br>
+      <input id="echo-input" type="text" placeholder='{"key": "value"}'>
+      <button onclick="callEcho()">Send</button>
+      <div class="result" id="echo-result"></div>
+    </div>
+
+    <!-- Timestamp -->
+    <div class="card">
+      <h2>Timestamp</h2>
+      <p>Returns the current UTC time in ISO and Unix formats.</p>
+      <span class="badge get">GET</span><code>/api/timestamp</code><br><br>
+      <button onclick="callTimestamp()">Fetch</button>
+      <div class="result" id="timestamp-result"></div>
+    </div>
+
+  </div>
+
+  <footer>Flask &bull; Python 3.12 &bull; Gunicorn</footer>
+
+  <script>
+    async function show(id, promise) {
+      const el = document.getElementById(id);
+      el.style.display = 'block';
+      try {
+        const res = await promise;
+        el.textContent = JSON.stringify(await res.json(), null, 2);
+      } catch (e) {
+        el.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    function callHealth()    { show('health-result',    fetch('/health')); }
+    function callTimestamp() { show('timestamp-result', fetch('/api/timestamp')); }
+
+    function callGreet() {
+      const name = document.getElementById('greet-name').value || 'World';
+      show('greet-result', fetch('/api/greet', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name}),
+      }));
+    }
+
+    function callEcho() {
+      let body;
+      try { body = JSON.parse(document.getElementById('echo-input').value); }
+      catch { body = {text: document.getElementById('echo-input').value}; }
+      show('echo-result', fetch('/api/echo', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      }));
+    }
+  </script>
 </body>
 </html>
